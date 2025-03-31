@@ -341,15 +341,18 @@ class Ros2NMEADriver(Node):
                     self.imu_pub.publish(current_imu)
         elif 'ROT' in parsed_sentence:
             data = parsed_sentence['ROT']
-            if data['rate_of_turn'] and data['fix_valid']:
-                if self.publish_rot_as_imu:
+            if data['fix_valid']:
+                rot = data['rate_of_turn'];
+
+                if self.publish_rot_as_imu and not math.isnan(rot):
+
                     current_rot = Imu()
 
                     current_rot.header.stamp = current_time
                     current_rot.header.frame_id = frame_id
                     current_rot.angular_velocity.x = 0
                     current_rot.angular_velocity.y = 0
-                    current_rot.angular_velocity.z = math.radians(- data['rate_of_turn']);
+                    current_rot.angular_velocity.z = -data['rate_of_turn'];
 
                     current_rot.angular_velocity_covariance[0] = 0.0
                     current_rot.angular_velocity_covariance[4] = 0.0
