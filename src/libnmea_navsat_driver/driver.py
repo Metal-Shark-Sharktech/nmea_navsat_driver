@@ -50,11 +50,13 @@ class Ros2NMEADriver(Node):
         self.vel_pub = self.create_publisher(TwistStamped, 'vel', 10)
         self.heading_pub = self.create_publisher(QuaternionStamped, 'heading', 10)
         self.imu_pub = self.create_publisher(Imu, 'imu/data', 10)
+        self.rot_pub = self.create_publisher(Imu, 'rot/data', 10)
         self.time_ref_pub = self.create_publisher(TimeReference, 'time_reference', 10)
 
         self.time_ref_source = self.declare_parameter('time_ref_source', 'gps').value
         self.use_RMC = self.declare_parameter('useRMC', False).value
         self.publish_imu = self.declare_parameter('publish_imu', False).value
+        self.publish_rot_as_imu = self.declare_parameter('publish_rot_as_imu', False).value
         self.yaw_variance = self.declare_parameter('yaw_variance', 0.05).value  # Suitable default value for yaw variance
 
         self.valid_fix = False
@@ -337,6 +339,26 @@ class Ros2NMEADriver(Node):
                     current_imu.orientation_covariance[4] = 0.0
                     current_imu.orientation_covariance[8] = self.yaw_variance
                     self.imu_pub.publish(current_imu)
+        elif 'ROT' in parsed_sentence:
+            data = parsed_sentence['ROT']
+            if data['rate_of_turn'] and data['fix_valid']:
+                if self.publish_rot_as_imu:
+                    current_rot = Imu()
+                    current_rot.header.stamp = current_time
+                    current_rot.header.frame_id = frame_id
+
+                    # Create and publish IMU message
+                    current_rot.header.stamp = current_time
+                    current_rot.header.frame_id = frame_id
+                    current_rot.angular_velocity.x = 0
+                    current_rot.angular_velocity.y = 0
+                    current_rot.angular_velocity.z = math.radians(- data['rate_of_turn']);
+
+                    current_rot.angular_velocity_covariance[0] = 0.0
+                    current_rot.angular_velocity_covariance[4] = 0.0
+                    current_rot.angular_velocity_covariance[8] = self.yaw_variance * 2.0
+                    self.rot_pub.publish(current_rot)
+
         else:
             return False
         return True

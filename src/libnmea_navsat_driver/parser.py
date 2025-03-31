@@ -146,6 +146,10 @@ parse_maps = {
     "VTG": [
         ("true_course", convert_deg_to_rads, 1),
         ("speed", convert_knots_to_mps, 5)
+    ],
+    "ROT": [
+        ("rate_of_turn", convert_deg_to_rads, 1),
+        ("fix_valid", convert_status_flag, 2)
     ]
 }
 
