@@ -344,10 +344,7 @@ class Ros2NMEADriver(Node):
             if data['rate_of_turn'] and data['fix_valid']:
                 if self.publish_rot_as_imu:
                     current_rot = Imu()
-                    current_rot.header.stamp = current_time
-                    current_rot.header.frame_id = frame_id
 
-                    # Create and publish IMU message
                     current_rot.header.stamp = current_time
                     current_rot.header.frame_id = frame_id
                     current_rot.angular_velocity.x = 0
