@@ -341,9 +341,10 @@ class Ros2NMEADriver(Node):
                     self.imu_pub.publish(current_imu)
         elif 'ROT' in parsed_sentence:
             data = parsed_sentence['ROT']
-            rot = data['rate_of_turn']
 
             if self.publish_rot_as_imu:
+
+                rot = data['rate_of_turn']
 
                 if not data['fix_valid']:
                     self.get_logger().warn("ROT solution is not valid")
