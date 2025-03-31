@@ -347,7 +347,7 @@ class Ros2NMEADriver(Node):
 
                 if not data['fix_valid']:
                     self.get_logger().warn("ROT solution is not valid")
-                elif not math.isnan(rot):
+                elif math.isnan(rot):
                     self.get_logger().warn("Failed to parse ROT")
                 else:
                     current_rot = Imu()
