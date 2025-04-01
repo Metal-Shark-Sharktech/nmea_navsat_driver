@@ -161,7 +161,9 @@ def parse_nmea_sentence(nmea_sentence):
         logger.debug("Regex didn't match, sentence not valid NMEA? Sentence was: %s"
                      % repr(nmea_sentence))
         return False
-    fields = [field.strip(',') for field in nmea_sentence.split(',')]
+    # Split off the checksum from the main fields
+    no_checksum = nmea_sentence.rsplit("*", 1)[0]
+    fields = [field.strip(",") for field in no_checksum.split(",")]
 
     # Ignore the $ and talker ID portions (e.g. GP)
     sentence_type = fields[0][3:]

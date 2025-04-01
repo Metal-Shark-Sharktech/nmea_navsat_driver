@@ -355,8 +355,8 @@ class Ros2NMEADriver(Node):
 
                     current_rot.header.stamp = current_time
                     current_rot.header.frame_id = frame_id
-                    current_rot.angular_velocity.x = 0
-                    current_rot.angular_velocity.y = 0
+                    current_rot.angular_velocity.x = 0.0
+                    current_rot.angular_velocity.y = 0.0
                     current_rot.angular_velocity.z = -data['rate_of_turn'];
 
                     current_rot.angular_velocity_covariance[0] = 0.0
