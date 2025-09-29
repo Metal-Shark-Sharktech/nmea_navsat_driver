@@ -46,18 +46,40 @@ class Ros2NMEADriver(Node):
     def __init__(self):
         super().__init__('nmea_navsat_driver')
 
-        self.fix_pub = self.create_publisher(NavSatFix, 'fix', 10)
-        self.vel_pub = self.create_publisher(TwistStamped, 'vel', 10)
-        self.heading_pub = self.create_publisher(QuaternionStamped, 'heading', 10)
-        self.imu_pub = self.create_publisher(Imu, 'imu/data', 10)
-        self.rot_pub = self.create_publisher(Imu, 'rot/data', 10)
-        self.time_ref_pub = self.create_publisher(TimeReference, 'time_reference', 10)
-
         self.time_ref_source = self.declare_parameter('time_ref_source', 'gps').value
         self.use_RMC = self.declare_parameter('useRMC', False).value
-        self.publish_imu = self.declare_parameter('publish_imu', False).value
+        publish_imu = self.declare_parameter('publish_imu', False).value
+        self.publish_heading_as_imu = self.declare_parameter('publish_heading_as_imu', False).value
         self.publish_rot_as_imu = self.declare_parameter('publish_rot_as_imu', False).value
+        self.publish_pashr_as_imu = self.declare_parameter('publish_pashr_as_imu', False).value
+        self.roll_variance = self.declare_parameter('roll_variance', 0.05).value
+        self.pitch_variance = self.declare_parameter('pitch_variance', 0.05).value
         self.yaw_variance = self.declare_parameter('yaw_variance', 0.05).value  # Suitable default value for yaw variance
+
+        # Handle deprecated publish_imu parameter
+        if publish_imu:
+            self.get_logger().warn("Parameter 'publish_imu' is deprecated. Please use 'publish_heading_as_imu' instead.")
+            if not self.publish_heading_as_imu:
+                self.publish_heading_as_imu = True
+
+        # Create publishers based on what will be used
+        self.fix_pub = self.create_publisher(NavSatFix, 'fix', 10)
+        self.vel_pub = self.create_publisher(TwistStamped, 'vel', 10)
+        self.time_ref_pub = self.create_publisher(TimeReference, 'time_reference', 10)
+
+        self.heading_pub = None
+        self.imu_pub = None
+        self.rot_pub = None
+
+        self.heading_pub = self.create_publisher(QuaternionStamped, 'heading', 10)
+
+        # IMU publisher needed for heading-as-imu or PASHR-as-imu
+        if self.publish_heading_as_imu or self.publish_pashr_as_imu:
+            self.imu_pub = self.create_publisher(Imu, 'imu/data', 10)
+
+        # ROT publisher only needed if publishing ROT as IMU
+        if self.publish_rot_as_imu:
+            self.rot_pub = self.create_publisher(Imu, 'rot/data', 10)
 
         self.valid_fix = False
 
@@ -269,20 +291,23 @@ class Ros2NMEADriver(Node):
             self.lon_std_dev = data['lon_std_dev']
             self.lat_std_dev = data['lat_std_dev']
             self.alt_std_dev = data['alt_std_dev']
+
         elif 'HDT' in parsed_sentence:
             data = parsed_sentence['HDT']
             if data['heading']:
-                current_heading = QuaternionStamped()
-                current_heading.header.stamp = current_time
-                current_heading.header.frame_id = frame_id
                 q = quaternion_from_euler(0, 0, math.radians(90 - data['heading']))
-                current_heading.quaternion.x = q[0]
-                current_heading.quaternion.y = q[1]
-                current_heading.quaternion.z = q[2]
-                current_heading.quaternion.w = q[3]
-                self.heading_pub.publish(current_heading)
 
-                if self.publish_imu:
+                if self.heading_pub:
+                    current_heading = QuaternionStamped()
+                    current_heading.header.stamp = current_time
+                    current_heading.header.frame_id = frame_id
+                    current_heading.quaternion.x = q[0]
+                    current_heading.quaternion.y = q[1]
+                    current_heading.quaternion.z = q[2]
+                    current_heading.quaternion.w = q[3]
+                    self.heading_pub.publish(current_heading)
+
+                if self.publish_heading_as_imu and self.imu_pub:
                     # Create and publish IMU message
                     current_imu = Imu()
                     current_imu.header.stamp = current_time
@@ -291,13 +316,13 @@ class Ros2NMEADriver(Node):
                     current_imu.orientation.y = q[1]
                     current_imu.orientation.z = q[2]
                     current_imu.orientation.w = q[3]
-                    current_imu.orientation_covariance[0] = 0.0  # We don't have real covariance data
+                    current_imu.orientation_covariance[0] = 0.0
                     current_imu.orientation_covariance[4] = 0.0
                     current_imu.orientation_covariance[8] = self.yaw_variance
                     self.imu_pub.publish(current_imu)
         elif 'HDG' in parsed_sentence:
             data = parsed_sentence['HDG']
-            
+
             magnetic_heading = data['magnetic_heading']
 
             # Calculate variation (declination) if it's missing or invalid
@@ -307,26 +332,26 @@ class Ros2NMEADriver(Node):
             variation_direction = 'E' if variation >= 0 else 'W'
 
             if not math.isnan(magnetic_heading):
-                # Publish the magnetic heading as a QuaternionStamped
-                current_heading = QuaternionStamped()
-                current_heading.header.stamp = current_time
-                current_heading.header.frame_id = frame_id
-
                 # Convert magnetic heading to radians and create quaternion
                 # Add the variation to convert to true heading
                 true_heading = magnetic_heading - variation if variation_direction == 'E' else magnetic_heading + variation
-                
+
                 # Wrap the true heading to [0, 360)
                 true_heading = (true_heading + 360) % 360
 
                 q = quaternion_from_euler(0, 0, math.radians(90 - true_heading))
-                current_heading.quaternion.x = q[0]
-                current_heading.quaternion.y = q[1]
-                current_heading.quaternion.z = q[2]
-                current_heading.quaternion.w = q[3]
-                self.heading_pub.publish(current_heading)
 
-                if self.publish_imu:
+                if self.heading_pub:
+                    current_heading = QuaternionStamped()
+                    current_heading.header.stamp = current_time
+                    current_heading.header.frame_id = frame_id
+                    current_heading.quaternion.x = q[0]
+                    current_heading.quaternion.y = q[1]
+                    current_heading.quaternion.z = q[2]
+                    current_heading.quaternion.w = q[3]
+                    self.heading_pub.publish(current_heading)
+
+                if self.publish_heading_as_imu and self.imu_pub:
                     # Create and publish IMU message
                     current_imu = Imu()
                     current_imu.header.stamp = current_time
@@ -335,14 +360,14 @@ class Ros2NMEADriver(Node):
                     current_imu.orientation.y = q[1]
                     current_imu.orientation.z = q[2]
                     current_imu.orientation.w = q[3]
-                    current_imu.orientation_covariance[0] = 0.0  # We don't have real covariance data
+                    current_imu.orientation_covariance[0] = 0.0
                     current_imu.orientation_covariance[4] = 0.0
                     current_imu.orientation_covariance[8] = self.yaw_variance
                     self.imu_pub.publish(current_imu)
         elif 'ROT' in parsed_sentence:
             data = parsed_sentence['ROT']
 
-            if self.publish_rot_as_imu:
+            if self.publish_rot_as_imu and self.rot_pub:
 
                 rot = data['rate_of_turn']
 
@@ -363,6 +388,47 @@ class Ros2NMEADriver(Node):
                     current_rot.angular_velocity_covariance[4] = 0.0
                     current_rot.angular_velocity_covariance[8] = self.yaw_variance * 2.0
                     self.rot_pub.publish(current_rot)
+        elif 'SHR' in parsed_sentence:
+            data = parsed_sentence['SHR']
+
+            if self.publish_pashr_as_imu:
+                heading = data['heading']
+                roll = data['roll']
+                pitch = data['pitch']
+
+                if math.isnan(heading) or math.isnan(roll) or math.isnan(pitch):
+                    self.get_logger().warn("Failed to parse PASHR orientation data")
+                    return False
+
+                # Convert from compass heading (0=North, clockwise) to ROS ENU yaw (0=East, CCW)
+                yaw_deg = 90.0 - heading
+                yaw_rad = math.radians(yaw_deg)
+                roll_rad = math.radians(roll)
+                pitch_rad = math.radians(pitch)
+
+                # Create quaternion from roll, pitch, yaw (fixed-axis X-Y-Z convention)
+                q = quaternion_from_euler(roll_rad, pitch_rad, yaw_rad)
+
+                if self.imu_pub:
+                    # Publish IMU message
+                    current_imu = Imu()
+                    current_imu.header.stamp = current_time
+                    current_imu.header.frame_id = frame_id
+                    current_imu.orientation.x = q[0]
+                    current_imu.orientation.y = q[1]
+                    current_imu.orientation.z = q[2]
+                    current_imu.orientation.w = q[3]
+
+                    # Set orientation covariance from accuracy estimates
+                    roll_variance = (math.radians(data['roll_accuracy'])) ** 2 if not math.isnan(data['roll_accuracy']) else self.roll_variance
+                    pitch_variance = (math.radians(data['pitch_accuracy'])) ** 2 if not math.isnan(data['pitch_accuracy']) else self.pitch_variance
+                    heading_variance = (math.radians(data['heading_accuracy'])) ** 2 if not math.isnan(data['heading_accuracy']) else self.yaw_variance
+
+                    current_imu.orientation_covariance[0] = roll_variance
+                    current_imu.orientation_covariance[4] = pitch_variance
+                    current_imu.orientation_covariance[8] = heading_variance
+
+                    self.imu_pub.publish(current_imu)
 
         else:
             return False

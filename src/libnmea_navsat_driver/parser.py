@@ -150,6 +150,18 @@ parse_maps = {
     "ROT": [
         ("rate_of_turn", convert_deg_to_rads, 1),
         ("fix_valid", convert_status_flag, 2)
+    ],
+    "SHR": [
+        ("utc_time", convert_time, 1),
+        ("heading", safe_float, 2),
+        ("true_flag", str, 3),
+        ("roll", safe_float, 4),
+        ("pitch", safe_float, 5),
+        ("heave", safe_float, 6),
+        ("roll_accuracy", safe_float, 7),
+        ("pitch_accuracy", safe_float, 8),
+        ("heading_accuracy", safe_float, 9),
+        ("aiding_status", safe_int, 10),
     ]
 }
 
@@ -157,7 +169,7 @@ parse_maps = {
 def parse_nmea_sentence(nmea_sentence):
     # Check for a valid nmea sentence
 
-    if not re.match(r'(^\$GP|^\$GN|^\$GL|^\$IN|^\$HC).*\*[0-9A-Fa-f]{2}$', nmea_sentence):
+    if not re.match(r'(^\$GP|^\$GN|^\$GL|^\$IN|^\$HC|^\$PA).*\*[0-9A-Fa-f]{2}$', nmea_sentence):
         logger.debug("Regex didn't match, sentence not valid NMEA? Sentence was: %s"
                      % repr(nmea_sentence))
         return False
